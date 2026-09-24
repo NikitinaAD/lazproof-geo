@@ -1,14 +1,13 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-import hashlib
 
 import laspy
 import numpy as np
 from shapely import intersects_xy
 from shapely.geometry.base import BaseGeometry
-
 
 UNSUPPORTED_WAVEFORM_FORMATS = {4, 5, 9, 10}
 
@@ -20,7 +19,7 @@ class VerificationInputError(ValueError):
 @dataclass(frozen=True)
 class StreamDigest:
     points: int
-    dimensions: dict[str, str]
+    records_sha256: str
     outside_geometry: int = 0
 
 
@@ -42,12 +41,9 @@ class VerificationReport:
         return asdict(self)
 
 
-def _file_sha256(path: Path, chunk_bytes: int = 8 * 1024 * 1024) -> str:
-    digest = hashlib.sha256()
+def _file_sha256(path: Path) -> str:
     with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(chunk_bytes), b""):
-            digest.update(block)
-    return digest.hexdigest()
+        return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
 def _crs_text(header: laspy.LasHeader) -> str | None:
@@ -81,29 +77,26 @@ def _stream_digest(
     require_inside: bool,
     chunk_size: int,
 ) -> StreamDigest:
+    digest = hashlib.sha256()
+    point_count = 0
+    outside_count = 0
     with laspy.open(path) as reader:
-        names = list(reader.header.point_format.dimension_names)
-        hashes = {name: hashlib.sha256() for name in names}
-        points_seen = 0
-        outside = 0
         for chunk in reader.chunk_iterator(chunk_size):
             if geometry is None:
-                selected = chunk
+                records = chunk
             else:
                 mask = intersects_xy(geometry, np.asarray(chunk.x), np.asarray(chunk.y))
                 if require_inside:
-                    outside += int(len(mask) - np.count_nonzero(mask))
-                    selected = chunk
+                    outside_count += int(np.count_nonzero(~mask))
+                    records = chunk
                 else:
-                    selected = chunk[mask]
-            points_seen += len(selected)
-            for name in names:
-                values = np.ascontiguousarray(np.asarray(selected[name]))
-                hashes[name].update(values.tobytes())
+                    records = chunk[mask]
+            point_count += len(records)
+            digest.update(np.ascontiguousarray(records.array).tobytes())
     return StreamDigest(
-        points=points_seen,
-        dimensions={name: digest.hexdigest() for name, digest in hashes.items()},
-        outside_geometry=outside,
+        points=point_count,
+        records_sha256=digest.hexdigest(),
+        outside_geometry=outside_count,
     )
 
 
@@ -116,8 +109,9 @@ def verify_subset(
 ) -> VerificationReport:
     """Verify that *result* is the exact ordered source subset selected by geometry.
 
-    Every LAS point dimension is hashed independently in record order. When geometry
-    is omitted, the result must contain every source point without modification.
+    Raw structured LAS point records are hashed in order after spatial selection.
+    When geometry is omitted, the result must contain every source point without
+    modification.
     """
     source_path = Path(source).resolve()
     result_path = Path(result).resolve()
@@ -137,16 +131,18 @@ def verify_subset(
         source_header = source_reader.header
         result_header = result_reader.header
         if source_header.point_format.id in UNSUPPORTED_WAVEFORM_FORMATS:
-            raise VerificationInputError("Waveform point formats 4, 5, 9 and 10 are not supported in v0.1")
+            raise VerificationInputError(
+                "Waveform point formats 4, 5, 9 and 10 are not supported in v0.1"
+            )
         if result_header.point_format.id in UNSUPPORTED_WAVEFORM_FORMATS:
-            raise VerificationInputError("Waveform point formats 4, 5, 9 and 10 are not supported in v0.1")
+            raise VerificationInputError(
+                "Waveform point formats 4, 5, 9 and 10 are not supported in v0.1"
+            )
         source_points = int(source_header.point_count)
         source_meta = _header_snapshot(source_header)
         result_meta = _header_snapshot(result_header)
 
-    expected = _stream_digest(
-        source_path, geometry, require_inside=False, chunk_size=chunk_size
-    )
+    expected = _stream_digest(source_path, geometry, require_inside=False, chunk_size=chunk_size)
     actual = _stream_digest(
         result_path, geometry, require_inside=geometry is not None, chunk_size=chunk_size
     )
@@ -157,7 +153,7 @@ def verify_subset(
         "source_unchanged": source_before == source_after,
         "header_preserved": source_meta == result_meta,
         "point_count_matches": expected.points == actual.points,
-        "dimension_hashes_match": expected.dimensions == actual.dimensions,
+        "dimension_hashes_match": expected.records_sha256 == actual.records_sha256,
         "all_result_points_inside": actual.outside_geometry == 0,
     }
     labels = {
@@ -175,10 +171,9 @@ def verify_subset(
         expected_points=expected.points,
         result_points=actual.points,
         source_points=source_points,
-        dimensions=list(expected.dimensions),
+        dimensions=[name for name, _ in source_meta["schema"]],
         source_sha256=source_after,
         result_sha256=result_hash,
         checks=checks,
         mismatches=mismatches,
     )
-

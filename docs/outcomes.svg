@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="250" viewBox="0 0 900 250">
+  <rect width="900" height="250" rx="18" fill="#f8fafc"/>
+  <style>
+    .title { font: 700 18px sans-serif; fill: #0f172a }
+    .body { font: 14px sans-serif; fill: #475569 }
+    .point { fill: #2563eb }
+  </style>
+  <g transform="translate(35 35)">
+    <rect width="250" height="180" rx="14" fill="#ecfdf5" stroke="#10b981" stroke-width="3"/>
+    <text class="title" x="125" y="34" text-anchor="middle">Verified</text>
+    <g transform="translate(45 80)">
+      <circle class="point" cx="0" cy="40" r="7"/><circle class="point" cx="40" cy="30" r="7"/>
+      <circle class="point" cx="80" cy="20" r="7"/><circle class="point" cx="120" cy="10" r="7"/>
+      <circle class="point" cx="160" cy="0" r="7"/>
+    </g>
+    <text class="body" x="125" y="158" text-anchor="middle">same records · same order</text>
+  </g>
+  <g transform="translate(325 35)">
+    <rect width="250" height="180" rx="14" fill="#fff7ed" stroke="#f97316" stroke-width="3"/>
+    <text class="title" x="125" y="34" text-anchor="middle">Reordered</text>
+    <path d="M48 116 C90 52, 164 52, 202 116" fill="none" stroke="#f97316" stroke-width="4" stroke-dasharray="7 6"/>
+    <circle class="point" cx="50" cy="116" r="7"/><circle class="point" cx="90" cy="88" r="7"/>
+    <circle class="point" cx="130" cy="72" r="7"/><circle class="point" cx="170" cy="88" r="7"/>
+    <circle class="point" cx="210" cy="116" r="7"/>
+    <text class="body" x="125" y="158" text-anchor="middle">dimension hashes differ</text>
+  </g>
+  <g transform="translate(615 35)">
+    <rect width="250" height="180" rx="14" fill="#fef2f2" stroke="#ef4444" stroke-width="3"/>
+    <text class="title" x="125" y="34" text-anchor="middle">Mutated</text>
+    <g transform="translate(45 80)">
+      <circle class="point" cx="0" cy="40" r="7"/><circle class="point" cx="40" cy="30" r="7"/>
+      <circle cx="80" cy="20" r="10" fill="#ef4444"/><circle class="point" cx="120" cy="10" r="7"/>
+      <circle class="point" cx="160" cy="0" r="7"/>
+    </g>
+    <text class="body" x="125" y="158" text-anchor="middle">one attribute changed</text>
+  </g>
+</svg>

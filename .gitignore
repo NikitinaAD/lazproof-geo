@@ -2,8 +2,13 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .pytest_cache/
+.coverage
 .venv/
 build/
 dist/
 .test-tmp*/
 .wheel-check/
+uv.lock
+examples/*.json
+examples/*.laz
+examples/*.wkt
