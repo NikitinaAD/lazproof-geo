@@ -19,7 +19,7 @@ class VerificationInputError(ValueError):
 @dataclass(frozen=True)
 class StreamDigest:
     points: int
-    records_sha256: str
+    dimensions: dict[str, str]
     outside_geometry: int = 0
 
 
@@ -41,9 +41,12 @@ class VerificationReport:
         return asdict(self)
 
 
-def _file_sha256(path: Path) -> str:
+def _file_sha256(path: Path, chunk_bytes: int = 8 * 1024 * 1024) -> str:
+    digest = hashlib.sha256()
     with path.open("rb") as stream:
-        return hashlib.file_digest(stream, "sha256").hexdigest()
+        for block in iter(lambda: stream.read(chunk_bytes), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def _crs_text(header: laspy.LasHeader) -> str | None:
@@ -77,26 +80,29 @@ def _stream_digest(
     require_inside: bool,
     chunk_size: int,
 ) -> StreamDigest:
-    digest = hashlib.sha256()
-    point_count = 0
-    outside_count = 0
     with laspy.open(path) as reader:
+        names = list(reader.header.point_format.dimension_names)
+        hashes = {name: hashlib.sha256() for name in names}
+        points_seen = 0
+        outside = 0
         for chunk in reader.chunk_iterator(chunk_size):
             if geometry is None:
-                records = chunk
+                selected = chunk
             else:
                 mask = intersects_xy(geometry, np.asarray(chunk.x), np.asarray(chunk.y))
                 if require_inside:
-                    outside_count += int(np.count_nonzero(~mask))
-                    records = chunk
+                    outside += int(len(mask) - np.count_nonzero(mask))
+                    selected = chunk
                 else:
-                    records = chunk[mask]
-            point_count += len(records)
-            digest.update(np.ascontiguousarray(records.array).tobytes())
+                    selected = chunk[mask]
+            points_seen += len(selected)
+            for name in names:
+                values = np.ascontiguousarray(np.asarray(selected[name]))
+                hashes[name].update(values.tobytes())
     return StreamDigest(
-        points=point_count,
-        records_sha256=digest.hexdigest(),
-        outside_geometry=outside_count,
+        points=points_seen,
+        dimensions={name: digest.hexdigest() for name, digest in hashes.items()},
+        outside_geometry=outside,
     )
 
 
@@ -109,9 +115,8 @@ def verify_subset(
 ) -> VerificationReport:
     """Verify that *result* is the exact ordered source subset selected by geometry.
 
-    Raw structured LAS point records are hashed in order after spatial selection.
-    When geometry is omitted, the result must contain every source point without
-    modification.
+    Every LAS point dimension is hashed independently in record order. When geometry
+    is omitted, the result must contain every source point without modification.
     """
     source_path = Path(source).resolve()
     result_path = Path(result).resolve()
@@ -153,7 +158,7 @@ def verify_subset(
         "source_unchanged": source_before == source_after,
         "header_preserved": source_meta == result_meta,
         "point_count_matches": expected.points == actual.points,
-        "dimension_hashes_match": expected.records_sha256 == actual.records_sha256,
+        "dimension_hashes_match": expected.dimensions == actual.dimensions,
         "all_result_points_inside": actual.outside_geometry == 0,
     }
     labels = {
@@ -171,7 +176,7 @@ def verify_subset(
         expected_points=expected.points,
         result_points=actual.points,
         source_points=source_points,
-        dimensions=[name for name, _ in source_meta["schema"]],
+        dimensions=list(expected.dimensions),
         source_sha256=source_after,
         result_sha256=result_hash,
         checks=checks,
