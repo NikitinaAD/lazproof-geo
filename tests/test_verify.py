@@ -3,21 +3,35 @@ import json
 import laspy
 import numpy as np
 import pytest
+from pyproj import CRS
 from shapely.geometry import box, mapping
 
 from lazproof.cli import main
 from lazproof.verify import verify_subset
 
 
-def write_cloud(path, indices=range(10), mutate=None, scales=None):
+def write_cloud(
+    path,
+    indices=range(10),
+    mutate=None,
+    scales=None,
+    crs=None,
+    extra_dimension=False,
+):
     indices = list(indices)
     header = laspy.LasHeader(point_format=3, version="1.2")
     header.scales = np.asarray(scales or [0.01, 0.01, 0.01])
+    if crs is not None:
+        header.add_crs(CRS.from_epsg(crs))
+    if extra_dimension:
+        header.add_extra_dim(laspy.ExtraBytesParams(name="quality", type=np.uint8))
     cloud = laspy.LasData(header)
     cloud.x = np.asarray(indices, dtype=float)
     cloud.y = np.asarray(indices, dtype=float)
     cloud.z = np.asarray(indices, dtype=float) * 2
     cloud.intensity = np.asarray(indices, dtype=np.uint16) * 7
+    if extra_dimension:
+        cloud.quality = np.asarray(indices, dtype=np.uint8)
     if mutate is not None:
         cloud.intensity[mutate] += 1
     cloud.write(path)
@@ -82,6 +96,22 @@ def test_header_mismatch_and_point_outside_mask_are_reported(tmp_path):
     assert not header_report.checks["header_preserved"]
     assert not outside_report.checks["all_result_points_inside"]
     assert not outside_report.checks["point_count_matches"]
+
+
+def test_crs_and_schema_mismatches_are_reported(tmp_path):
+    source = tmp_path / "source.laz"
+    different_crs = tmp_path / "different-crs.laz"
+    different_schema = tmp_path / "different-schema.laz"
+    write_cloud(source, crs=32637)
+    write_cloud(different_crs, crs=32636)
+    write_cloud(different_schema, crs=32637, extra_dimension=True)
+
+    crs_report = verify_subset(source, different_crs)
+    schema_report = verify_subset(source, different_schema)
+
+    assert not crs_report.checks["header_preserved"]
+    assert not schema_report.checks["header_preserved"]
+    assert not schema_report.checks["dimension_hashes_match"]
 
 
 def test_invalid_invocation_is_rejected(tmp_path):

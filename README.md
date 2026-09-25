@@ -31,20 +31,37 @@ Exit codes are stable:
 
 ## Reproducible example
 
-Generate four tiny synthetic LAZ files and a WKT mask:
+Generate a complete suite of tiny synthetic LAZ files, run every verification,
+and write one JSON report per case:
 
 ```bash
-python examples/make_example.py
-lazproof verify examples/source.laz examples/subset.laz \
-  --inside examples/mask.wkt --report examples/valid.json
-lazproof verify examples/source.laz examples/reordered.laz \
-  --inside examples/mask.wkt --report examples/reordered.json
-lazproof verify examples/source.laz examples/mutated.laz \
-  --inside examples/mask.wkt --report examples/mutated.json
+python examples/run_examples.py
 ```
 
-The first command exits `0`. The next two exit `1`: one changes record order and
-the other changes a single intensity value. A report contains explicit checks:
+The suite exercises both successful and intentionally failing results:
+
+| scenario | expected result | what it demonstrates |
+|---|---:|---|
+| `valid` | pass | exact polygon-selected records in source order |
+| `empty` | pass | a valid selection containing zero points |
+| `reordered` | fail | the same records in a different order |
+| `mutated` | fail | one changed intensity value |
+| `missing` | fail | one selected source point omitted |
+| `outside_mask` | fail | an extra result point outside the polygon |
+| `header_mismatch` | fail | different coordinate scales |
+| `crs_mismatch` | fail | different embedded CRS metadata |
+| `schema_mismatch` | fail | an added Extra Bytes dimension |
+
+Generated files are placed under `examples/generated/`. To run one case through
+the CLI instead:
+
+```bash
+lazproof verify examples/generated/source.laz examples/generated/valid.laz \
+  --inside examples/generated/mask.wkt \
+  --report examples/generated/valid-cli.json
+```
+
+A report contains explicit checks:
 
 ```json
 {
@@ -96,6 +113,9 @@ bounded chunks. With no geometry, the result must be an exact full copy.
 
 Selection geometry may be WKT, `.wkt`, GeoJSON, or a Fiona-supported vector layer.
 Run `lazproof --help` for all options.
+
+The pre-release and launch checks are listed in
+[`docs/release-checklist.md`](docs/release-checklist.md).
 
 ## Development
 

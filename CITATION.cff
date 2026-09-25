@@ -2,7 +2,6 @@ cff-version: 1.2.0
 message: "If you use lazproof-geo, please cite this software."
 title: "lazproof-geo"
 version: 0.1.1
-date-released: 2026-09-24
 authors:
   - family-names: Nikitina
     given-names: Alena
