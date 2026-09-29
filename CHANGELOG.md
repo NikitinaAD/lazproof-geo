@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.1 — unreleased
+## 0.1.1 — 2026-09-29
 
 - Documented proof boundaries, exit codes, and the JSON report.
 - Added reproducible valid, reordered, and mutated LAZ examples.
